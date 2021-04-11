@@ -1,11 +1,13 @@
 OBJECTS=UDPEchoClient-Timeout.o UDPEchoServer.o DieWithError.o
-EXE=Server Client
+EXE=server client
 
-Server: UDPEchoServer.c DieWithError.c
-	gcc -o Server -w UDPEchoServer.c DieWithError.c
+all: server client
 
-Client: UDPEchoClient-Timeout.c DieWithError.c
-	gcc -o Client -w UDPEchoClient-Timeout.c DieWithError.c
+server: UDPEchoServer.c DieWithError.c
+	gcc -o server -w UDPEchoServer.c DieWithError.c
+
+client: UDPEchoClient-Timeout.c DieWithError.c
+	gcc -o client -w UDPEchoClient-Timeout.c DieWithError.c
 
 clean:
 	-rm $(OBJECTS) $(EXE)
