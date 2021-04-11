@@ -6,7 +6,7 @@
 #include <unistd.h>     /* for close() and alarm() */
 #include <errno.h>      /* for errno and EINTR */
 #include <signal.h>     /* for sigaction() */
-//#include "DieWithError.c"
+#include "packet.c"
 
 #define ECHOMAX         255     /* Longest string to echo */
 #define TIMEOUT_SECS    2       /* Seconds between retransmits */
@@ -30,6 +30,12 @@ int main(int argc, char *argv[])
     char echoBuffer[ECHOMAX+1];      /* Buffer for echo string */
     int echoStringLen;               /* Length of string to echo */
     int respStringLen;               /* Size of received datagram */
+
+    // buffer is ALL the data we are sending to the server
+    // packets can take 10B data at a time. 1 char = 1B, therefore we need 24 packets to transmit this message
+    char buffer[240]="The University of Kentucky is a public, research-extensive,land grant university dedicated to improving people’s lives throughexcellence in teaching, research, health care, cultural enrichment,and economic development.";
+
+    struct data_pkt_t packet;
 
     if ((argc < 3) || (argc > 4))    /* Test for correct number of arguments */
     {
