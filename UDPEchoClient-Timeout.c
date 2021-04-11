@@ -6,6 +6,7 @@
 #include <unistd.h>     /* for close() and alarm() */
 #include <errno.h>      /* for errno and EINTR */
 #include <signal.h>     /* for sigaction() */
+//#include "DieWithError.c"
 
 #define ECHOMAX         255     /* Longest string to echo */
 #define TIMEOUT_SECS    2       /* Seconds between retransmits */
