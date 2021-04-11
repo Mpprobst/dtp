@@ -13,7 +13,7 @@
 
 int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
 
-void DieWithError(char *errorMessage);   /* Error handling function */
+//void DieWithError(char *errorMessage);   /* Error handling function */
 void CatchAlarm(int ignored);            /* Handler for SIGALRM */
 
 int main(int argc, char *argv[])

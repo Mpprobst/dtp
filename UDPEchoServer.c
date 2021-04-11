@@ -7,8 +7,6 @@
 
 #define ECHOMAX 255     /* Longest string to echo */
 
-void DieWithError(char *errorMessage);  /* External error handling function */
-
 int main(int argc, char *argv[])
 {
     int sock;                        /* Socket */
@@ -40,6 +38,8 @@ int main(int argc, char *argv[])
     /* Bind to the local address */
     if (bind(sock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
         DieWithError("bind() failed");
+
+    //printf("serv: %i", echoServAddr.sin_addr.s_addr);
 
     for (;;) /* Run forever */
     {
