@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
     echoServAddr.sin_addr.s_addr = inet_addr(servIP);  /* Server IP address */
     echoServAddr.sin_port = htons(echoServPort);       /* Server port */
 
-    // TODO: loop until all packets have been sent
+    /* ----- TODO: loop until all packets have been sent ----- */
     // initially send the first 5 packets
 
     // printf("SEND PACKET %i", packet_no)
@@ -115,9 +115,8 @@ int main(int argc, char *argv[])
         else
             DieWithError("recvfrom() failed");
 
-    // ACK Received
+    /* ----- TODO: HANDLE ACK ----- */
     // printf("-------- RECEIVE ACK %i", ack_no)
-    /* recvfrom() got something --  cancel the timeout */
     // Step1 - clear the timer
     alarm(0);
     // Step2 - process the ACK
