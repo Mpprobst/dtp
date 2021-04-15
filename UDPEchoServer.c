@@ -6,7 +6,9 @@
 #include <unistd.h>     /* for close() */
 #include "packet.c"
 #include "ack.c"
-#define ECHOMAX 255     /* Longest string to echo */
+
+#define PKT_SIZE        22
+#define ACK_SIZE        8
 
 int main(int argc, char *argv[])
 {
@@ -14,13 +16,18 @@ int main(int argc, char *argv[])
     struct sockaddr_in echoServAddr; /* Local address */
     struct sockaddr_in echoClntAddr; /* Client address */
     unsigned int cliAddrLen;         /* Length of incoming message */
-    char echoBuffer[ECHOMAX];        /* Buffer for echo string */
     unsigned short echoServPort;     /* Server port */
+    struct data_pkt_t pkt;
     int recvMsgSize;                 /* Size of received message */
-    int packet_rcvd[24];       // record of the packets received
+    const int num_packets = 24;
+    const int data_length = 10;
+    int packet_rcvd[num_packets] = {0};    // record of the packets received
     int * drop_list;                 // list of packets to drop
+    int ndrops = 0;                  // length of drop_list
+    int drop_idx = 0;                // index of next packet to drop
+    char * buffer[num_packets * data_length];
 
-    if (argc < 3)         /* Test for correct number of parameters */
+    if (argc < 2)         /* Test for correct number of parameters */
     {
         fprintf(stderr,"Usage:  %s <UDP SERVER PORT> <LIST OF NUMBERS>\n", argv[0]);
         exit(1);
@@ -31,8 +38,8 @@ int main(int argc, char *argv[])
     // fill in the drop list
     if (argc >= 3)
     {
-      int ndrops = argc - 2;
-      drop_list = (int*)malloc(ndrops,sizeof(int));
+      ndrops = argc - 2;
+      drop_list = (int*)malloc(ndrops*sizeof(int));
       for (int i = 0; i < ndrops; i++)
       {
         drop_list[i] = atoi(argv[i+2]);
@@ -61,32 +68,49 @@ int main(int argc, char *argv[])
         cliAddrLen = sizeof(echoClntAddr);
 
         /* Block until receive message from a client */
-        if ((recvMsgSize = recvfrom(sock, echoBuffer, ECHOMAX, 0,
+        if ((recvMsgSize = recvfrom(sock, &pkt, PKT_SIZE, 0,
             (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
             DieWithError("recvfrom() failed");
 
-        printf("Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
-
+        fprintf(stderr, "Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
         /* ----- TODO: READ DATA ----- */
         // Packet received, determine whether to drop it or not
-        // printf("RECEIVE PACKET %i", sequence_no)
+        fprintf(stderr, "RECEIVE PACKET %i\n", pkt.seq_no);
         // if sequence_no == drop_list[0], then drop packet, don't send an ACK.
-          // Then remove sequence_no from drop_list
-          // printf("---- DROP %i", sequence_no);
-        // else, packet_rcvd[sequence_no] = 1
-          // copy the data in the packet to the correct loation of the receiving buffer
-          // send an ACK with ack_no = max_seq
-            // aka loop through packets_rcvd until seeing a 0
-          // if ack_no == 23, print out the whole message in receiving buffer
-          // send the ack using ack_pkt_t
-          // printf("-------- SEND ACK %i", ack_no);
+        if (ndrops > drop_idx) {
+          if (pkt.seq_no == drop_list[drop_idx]) {
+            // Then remove sequence_no from drop_list
+            fprintf(stderr, "---- DROP %i", pkt.seq_no);
+            drop_idx++;
+          }
+        }
+        else {
+          // else, packet_rcvd[sequence_no] = 1
+          packet_rcvd[pkt.seq_no] = 1;
+            // copy the data in the packet to the correct loation of the receiving buffer
+          memcpy(buffer + pkt.seq_no, pkt.data, pkt.length);
+          //memcpy(buffer[pkt.seq_no * data_length], pkt.data[0] ,pkt.length);
+          //printf("recieved: %s", pkt.data);
+            // send an ACK with ack_no = max_seq
+              // aka loop through packets_rcvd until seeing a 0
+            // if ack_no == 23, print out the whole message in receiving buffer
+            // send the ack using ack_pkt_t
+            /* TODO: send ACK */
+          struct ack_pkt_t ack;
+          ack.type = 2;
+          for (int i = 0; i < num_packets; i++) {
+            ack.ack_no = i;
+            if (packet_rcvd[i] == 0){
+              ack.ack_no--;
+              break;
+            }
+          }
+          fprintf(stderr, "-------- SEND ACK %i\n", ack.ack_no);
 
-
-        // TODO: send and ACK?
-        /* Send received datagram back to the client */
-        if (sendto(sock, echoBuffer, recvMsgSize, 0,
-             (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != recvMsgSize)
-            DieWithError("sendto() sent a different number of bytes than expected");
+          if (sendto(sock, &ack, ACK_SIZE, 0,
+               (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
+              DieWithError("sendto() sent a different number of bytes than expected");
+        }
     }
     /* NOT REACHED */
 }

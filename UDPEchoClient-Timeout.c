@@ -9,9 +9,10 @@
 #include "packet.c"
 #include "ack.c"
 
-#define ECHOMAX         255     /* Longest string to echo */
 #define TIMEOUT_SECS    4       /* Seconds between retransmits */
 #define MAXTRIES        5       /* Tries before giving up */
+#define PKT_SIZE        22
+#define ACK_SIZE        8
 
 int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
 const int window_size = 5;   // const
@@ -28,15 +29,11 @@ int main(int argc, char *argv[])
     unsigned int fromSize;           /* In-out of address size for recvfrom() */
     struct sigaction myAction;       /* For setting signal handler */
     char *servIP;                    /* IP address of server */
-    char *echoString;                /* String to send to echo server */
-    char echoBuffer[ECHOMAX+1];      /* Buffer for echo string */
-    int echoStringLen;               /* Length of string to echo */
-    int respStringLen;               /* Size of received datagram */
+    int respLen;                     /* Size of received datagram */
 
     // buffer is ALL the data we are sending to the server
     // packets can take 10B data at a time. 1 char = 1B, therefore we need 24 packets to transmit this message
     char buffer[240]="The University of Kentucky is a public, research-extensive,land grant university dedicated to improving people’s lives throughexcellence in teaching, research, health care, cultural enrichment,and economic development.";
-    struct data_pkt_t[window_size] window;    //?
 
     // base and last_sent indicate the boundaries of the sliding window
     int base = 0;        // smallest sequence number in the window
@@ -44,17 +41,13 @@ int main(int argc, char *argv[])
 
     int ndups = 0;   // number of duplicate ACKs received
 
-    if ((argc < 3) || (argc > 4))    /* Test for correct number of arguments */
+    if ((argc < 2) || (argc > 3))    /* Test for correct number of arguments */
     {
-        fprintf(stderr,"Usage: %s <Server IP> <Echo Word> [<Echo Port>]\n", argv[0]);
+        fprintf(stderr,"Usage: %s <Server IP> [<Echo Port>]\n", argv[0]);
         exit(1);
     }
 
     servIP = argv[1];           /* First arg:  server IP address (dotted quad) */
-    echoString = argv[2];       /* Second arg: string to echo */
-
-    if ((echoStringLen = strlen(echoString)) > ECHOMAX)
-        DieWithError("Echo word too long");
 
     if (argc == 4)
         echoServPort = atoi(argv[3]);  /* Use given port, if any */
@@ -82,26 +75,37 @@ int main(int argc, char *argv[])
 
     /* ----- TODO: loop until all packets have been sent ----- */
     // initially send the first 5 packets
+    struct data_pkt_t pkt;
+    pkt.type = 1;
+    pkt.seq_no = 0;
+    pkt.length = 10;
+    memcpy(pkt.data, &buffer[pkt.seq_no * 10], pkt.length);
+    //printf("Sending: %s. size of = %i, %i, %i, %i = %i\n", pkt.data, sizeof(pkt.type), sizeof(pkt.seq_no), sizeof(pkt.length), sizeof(pkt.data), sizeof(pkt));
 
     // printf("SEND PACKET %i", packet_no)
     /* Send the string to the server */
-    if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)
-               &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
-        DieWithError("sendto() sent a different number of bytes than expected");
+    int sendsize = sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr));
+    //if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
+    //           &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
+    //    DieWithError("sendto() sent a different number of bytes than expected");
+    //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
+    if (sendsize != PKT_SIZE){
+      DieWithError("sendto() sent a different number of bytes than expected");
+    }
 
     /* Get a response */
-
+    struct ack_pkt_t ack_pkt;
     fromSize = sizeof(fromAddr);
     alarm(TIMEOUT_SECS);        /* Set the timeout */
-    while ((respStringLen = recvfrom(sock, echoBuffer, ECHOMAX, 0,
+    while ((respLen = recvfrom(sock, &ack_pkt, ACK_SIZE, 0,
            (struct sockaddr *) &fromAddr, &fromSize)) < 0)
         if (errno == EINTR)     /* Alarm went off  */
         {
             if (tries < MAXTRIES)      /* incremented by signal handler */
             {
                 printf("timed out, %d more tries...\n", MAXTRIES-tries);
-                if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)
-                            &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
+                if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
+                            &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
                     DieWithError("sendto() failed");
                 alarm(TIMEOUT_SECS);
             }
@@ -116,7 +120,7 @@ int main(int argc, char *argv[])
             DieWithError("recvfrom() failed");
 
     /* ----- TODO: HANDLE ACK ----- */
-    // printf("-------- RECEIVE ACK %i", ack_no)
+    printf("-------- RECEIVE ACK %i\n", ack_pkt.ack_no);
     // Step1 - clear the timer
     alarm(0);
     // Step2 - process the ACK
@@ -134,8 +138,8 @@ int main(int argc, char *argv[])
     // Step3 - set timer after processing ACK
 
     /* null-terminate the received data */
-    echoBuffer[respStringLen] = '\0';
-    printf("Received: %s\n", echoBuffer);    /* Print the received data */
+    //echoBuffer[respStringLen] = '\0';
+    //printf("Received: %s\n", echoBuffer);    /* Print the received data */
 
     close(sock);
     exit(0);
