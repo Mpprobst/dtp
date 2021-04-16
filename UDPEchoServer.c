@@ -72,30 +72,22 @@ int main(int argc, char *argv[])
             (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
             DieWithError("recvfrom() failed");
 
-        fprintf(stderr, "Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
+        //fprintf(stderr, "Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
         /* ----- TODO: READ DATA ----- */
-        // Packet received, determine whether to drop it or not
         fprintf(stderr, "RECEIVE PACKET %i\n", pkt.seq_no);
-        // if sequence_no == drop_list[0], then drop packet, don't send an ACK.
         if (ndrops > drop_idx) {
           if (pkt.seq_no == drop_list[drop_idx]) {
-            // Then remove sequence_no from drop_list
             fprintf(stderr, "---- DROP %i", pkt.seq_no);
             drop_idx++;
           }
         }
         else {
-          // else, packet_rcvd[sequence_no] = 1
           packet_rcvd[pkt.seq_no] = 1;
-            // copy the data in the packet to the correct loation of the receiving buffer
-          memcpy(buffer + pkt.seq_no, pkt.data, pkt.length);
-          //memcpy(buffer[pkt.seq_no * data_length], pkt.data[0] ,pkt.length);
-          //printf("recieved: %s", pkt.data);
-            // send an ACK with ack_no = max_seq
-              // aka loop through packets_rcvd until seeing a 0
-            // if ack_no == 23, print out the whole message in receiving buffer
-            // send the ack using ack_pkt_t
-            /* TODO: send ACK */
+          int data_idx = pkt.seq_no * data_length;
+          //fprintf(stderr, "insert into buffer[%i]\n", pkt.seq_no * data_length);
+          memcpy(buffer + data_idx, pkt.data, pkt.length);
+          fprintf(stderr, "buff[%i]=%s\n", data_idx, buffer + data_idx);
+
           struct ack_pkt_t ack;
           ack.type = 2;
           for (int i = 0; i < num_packets; i++) {
@@ -105,11 +97,21 @@ int main(int argc, char *argv[])
               break;
             }
           }
-          fprintf(stderr, "-------- SEND ACK %i\n", ack.ack_no);
 
-          if (sendto(sock, &ack, ACK_SIZE, 0,
-               (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
-              DieWithError("sendto() sent a different number of bytes than expected");
+          if (ack.ack_no < num_packets) {
+            fprintf(stderr, "-------- SEND ACK %i\n", ack.ack_no);
+            if (sendto(sock, &ack, ACK_SIZE, 0,
+                 (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
+                DieWithError("sendto() sent a different number of bytes than expected");
+
+            if (ack.ack_no == num_packets-1) {
+              for (int i = 0; i < num_packets * data_length; i++){
+                fprintf(stderr, "%c", buffer[i]);
+                fflush(stdout);
+              }
+              return 0;
+            }
+          }
         }
     }
     /* NOT REACHED */

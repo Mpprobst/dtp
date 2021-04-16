@@ -10,7 +10,7 @@
 #include "ack.c"
 
 #define TIMEOUT_SECS    4       /* Seconds between retransmits */
-#define MAXTRIES        5       /* Tries before giving up */
+#define MAXTRIES        1       /* Tries before giving up */
 #define PKT_SIZE        22
 #define ACK_SIZE        8
 
@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 
     // base and last_sent indicate the boundaries of the sliding window
     int base = 0;        // smallest sequence number in the window
-    int last_sent = 0;   // largest sequence number in the window that can be sent or has been sent. base+4
+    int last_sent = -1;   // largest sequence number in the window that can be sent or has been sent. base+4
 
     int ndups = 0;   // number of duplicate ACKs received
 
@@ -74,72 +74,83 @@ int main(int argc, char *argv[])
     echoServAddr.sin_port = htons(echoServPort);       /* Server port */
 
     /* ----- TODO: loop until all packets have been sent ----- */
-    // initially send the first 5 packets
-    struct data_pkt_t pkt;
-    pkt.type = 1;
-    pkt.seq_no = 0;
-    pkt.length = 10;
-    memcpy(pkt.data, &buffer[pkt.seq_no * 10], pkt.length);
-    //printf("Sending: %s. size of = %i, %i, %i, %i = %i\n", pkt.data, sizeof(pkt.type), sizeof(pkt.seq_no), sizeof(pkt.length), sizeof(pkt.data), sizeof(pkt));
+    while (1==1) {
+      // initially send the first 5 packets
+      struct data_pkt_t pkt;
+      pkt.type = 1;
+      pkt.seq_no = last_sent + 1;
+      pkt.length = 10;
+      //printf("Sending: %s. size of = %i, %i, %i, %i = %i\n", pkt.data, sizeof(pkt.type), sizeof(pkt.seq_no), sizeof(pkt.length), sizeof(pkt.data), sizeof(pkt));
 
-    // printf("SEND PACKET %i", packet_no)
-    /* Send the string to the server */
-    int sendsize = sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr));
-    //if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
-    //           &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
-    //    DieWithError("sendto() sent a different number of bytes than expected");
-    //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
-    if (sendsize != PKT_SIZE){
-      DieWithError("sendto() sent a different number of bytes than expected");
-    }
+      // send the next packet if we can
+      if (last_sent < base + window_size && last_sent < 23) {
+        // only copy the data into the packet if we are actually ready to send
+        memcpy(pkt.data, &buffer[pkt.seq_no * 10], pkt.length);
 
-    /* Get a response */
-    struct ack_pkt_t ack_pkt;
-    fromSize = sizeof(fromAddr);
-    alarm(TIMEOUT_SECS);        /* Set the timeout */
-    while ((respLen = recvfrom(sock, &ack_pkt, ACK_SIZE, 0,
-           (struct sockaddr *) &fromAddr, &fromSize)) < 0)
-        if (errno == EINTR)     /* Alarm went off  */
-        {
-            if (tries < MAXTRIES)      /* incremented by signal handler */
-            {
-                printf("timed out, %d more tries...\n", MAXTRIES-tries);
-                if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
-                            &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
-                    DieWithError("sendto() failed");
-                alarm(TIMEOUT_SECS);
-            }
-            else
-            {
-                // TODO: retransmit all packets from base to last_sent.
-                // set a timer
-                DieWithError("No Response");
-            }
+        if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
+                   &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
+            DieWithError("sendto() sent a different number of bytes than expected");
+        //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
+        printf("SEND PACKET %i", pkt.seq_no);
+        last_sent = pkt.seq_no;
+        if (last_sent > 23){
+          last_sent = 23;
         }
-        else
-            DieWithError("recvfrom() failed");
+      }
 
-    /* ----- TODO: HANDLE ACK ----- */
-    printf("-------- RECEIVE ACK %i\n", ack_pkt.ack_no);
-    // Step1 - clear the timer
-    alarm(0);
-    // Step2 - process the ACK
-    // if ack_no == 23, then stop
-    // if ack_no < base-1, then ignore
-    // if ack_no == base-1, then it is a duplicate
-    // if num_dups >= 3, then retransmit the packet with sequence number base ONLY
-    // if ack_no >= base, then we have a new ACK.
-      // set ndups = 0.
-      // base = ack_no + 1.
-      // send new packets allowed by window size.
-        // Packets to send are packets with sequence_no from last_sent + 1 to min(base+4, 23)
-        // last_sent = min(base+4, 23)
+      /* Get a response */
+      struct ack_pkt_t ack;
+      fromSize = sizeof(fromAddr);
+      alarm(TIMEOUT_SECS);        /* Set the timeout */
+      while ((respLen = recvfrom(sock, &ack, ACK_SIZE, 0,
+             (struct sockaddr *) &fromAddr, &fromSize)) < 0)
+          if (errno == EINTR)     /* Alarm went off  */
+          {
+            // TODO: retransmit all packets from base to last_sent.
+            base = pkt.seq_no;
+            last_sent = pkt.seq_no-1;   // -1 is because last_sent is incramented
+            DieWithError("No Response");
+          }
+          else
+              DieWithError("recvfrom() failed");
 
-    // Step3 - set timer after processing ACK
+      /* ----- TODO: HANDLE ACK ----- */
+      printf("-------- RECEIVE ACK %i\n", ack.ack_no);
+      // Step1 - clear the timer
+      alarm(0);
+      // Step2 - process the ACK
+      if (ack.ack_no == 23){          // 23 is the last packet, we are done
+        break;
+      }
+      else if (ack.ack_no < base-1) {
+        // ignore the packet
+      }
+      else if (ack.ack_no == base-1) {  // ack is a duplicate
+        ndups++;
+        if (ndups >= 3) {
+          last_sent = base-1;
+          printf("retransmitting pkt %i", last_sent);
+          // retransmit the packet with sequence number base ONLY
+          /*
+          pkt.seq_no = base;
+          if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
+                     &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
+              DieWithError("sendto() sent a different number of bytes than expected");
+          //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
+          printf("SEND PACKET %i", pkt.seq_no);*/
+        }
+      }
+      else if (ack.ack_no >= base) {    // new ack
+        ndups = 0;
+        base = ack.ack_no + 1;
+      }
+        // send new packets allowed by window size. handled at beginning of loop
+          // Packets to send are packets with sequence_no from last_sent + 1 to min(base+4, 23)
+          // last_sent = min(base+4, 23)
 
-    /* null-terminate the received data */
-    //echoBuffer[respStringLen] = '\0';
-    //printf("Received: %s\n", echoBuffer);    /* Print the received data */
+      // Step3 - set timer after processing ACK
+
+    }
 
     close(sock);
     exit(0);
