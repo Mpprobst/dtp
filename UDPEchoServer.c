@@ -6,6 +6,7 @@
 #include <unistd.h>     /* for close() */
 #include "packet.c"
 #include "ack.c"
+#include "string.h"
 
 #define PKT_SIZE        22
 #define ACK_SIZE        8
@@ -25,7 +26,7 @@ int main(int argc, char *argv[])
     int * drop_list;                 // list of packets to drop
     int ndrops = 0;                  // length of drop_list
     int drop_idx = 0;                // index of next packet to drop
-    char * buffer[num_packets * data_length];
+    char * buffer[data_length * num_packets];
 
     if (argc < 2)         /* Test for correct number of parameters */
     {
@@ -83,9 +84,10 @@ int main(int argc, char *argv[])
         }
         else {
           packet_rcvd[pkt.seq_no] = 1;
-          int data_idx = pkt.seq_no * data_length;
+          int data_idx = pkt.seq_no * data_length * sizeof(char);
           //fprintf(stderr, "insert into buffer[%i]\n", pkt.seq_no * data_length);
-          memcpy(buffer + data_idx, pkt.data, pkt.length);
+          //memcpy(buffer + data_idx, pkt.data, pkt.length * sizeof(char));
+          strcpy(buffer + data_idx, pkt.data);
           fprintf(stderr, "buff[%i]=%s\n", data_idx, buffer + data_idx);
 
           struct ack_pkt_t ack;
@@ -105,10 +107,10 @@ int main(int argc, char *argv[])
                 DieWithError("sendto() sent a different number of bytes than expected");
 
             if (ack.ack_no == num_packets-1) {
-              for (int i = 0; i < num_packets * data_length; i++){
-                fprintf(stderr, "%c", buffer[i]);
-                fflush(stdout);
+              for (int i = 0; i < num_packets ; i++){
+                fprintf(stderr, "%s", buffer + (i * data_length * sizeof(char)));
               }
+              fprintf(stderr, "\n");
               return 0;
             }
           }
