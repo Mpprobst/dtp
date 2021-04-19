@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     int * drop_list;                 // list of packets to drop
     int ndrops = 0;                  // length of drop_list
     int drop_idx = 0;                // index of next packet to drop
-    char * buffer[data_length * num_packets];
+    char * buffer[data_length * num_packets] = {'-'};
 
     if (argc < 2)         /* Test for correct number of parameters */
     {
@@ -75,46 +75,53 @@ int main(int argc, char *argv[])
 
         //fprintf(stderr, "Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
         /* ----- TODO: READ DATA ----- */
-        fprintf(stderr, "RECEIVE PACKET %i\n", pkt.seq_no);
+        fprintf(stderr, "RECEIVE PACKET %i \n", pkt.seq_no);
+        int drop = 0;
         if (ndrops > drop_idx) {
           if (pkt.seq_no == drop_list[drop_idx]) {
-            fprintf(stderr, "---- DROP %i", pkt.seq_no);
+            fprintf(stderr, "\t---- DROP %i \n", pkt.seq_no);
             drop_idx++;
+            drop = 1;
           }
         }
-        else {
+
+        if (drop == 0) {
           packet_rcvd[pkt.seq_no] = 1;
           int data_idx = pkt.seq_no * data_length * sizeof(char);
-          //fprintf(stderr, "insert into buffer[%i]\n", pkt.seq_no * data_length);
           //memcpy(buffer + data_idx, pkt.data, pkt.length * sizeof(char));
           strcpy(buffer + data_idx, pkt.data);
-          fprintf(stderr, "buff[%i]=%s\n", data_idx, buffer + data_idx);
+          //fprintf(stderr, "buff[%i]=%s\n", data_idx, buffer + data_idx);
+        }
 
-          struct ack_pkt_t ack;
-          ack.type = 2;
-          for (int i = 0; i < num_packets; i++) {
-            ack.ack_no = i;
-            if (packet_rcvd[i] == 0){
-              ack.ack_no--;
-              break;
-            }
-          }
-
-          if (ack.ack_no < num_packets) {
-            fprintf(stderr, "-------- SEND ACK %i\n", ack.ack_no);
-            if (sendto(sock, &ack, ACK_SIZE, 0,
-                 (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
-                DieWithError("sendto() sent a different number of bytes than expected");
-
-            if (ack.ack_no == num_packets-1) {
-              for (int i = 0; i < num_packets ; i++){
-                fprintf(stderr, "%s", buffer + (i * data_length * sizeof(char)));
-              }
-              fprintf(stderr, "\n");
-              return 0;
-            }
+        struct ack_pkt_t ack;
+        ack.type = 2;
+        ack.ack_no = num_packets-1;
+        for (int i = 0; i < num_packets; i++) {
+          if (packet_rcvd[i] == 0){
+            ack.ack_no = i-1;
+            /*if (ack.ack_no < 0){
+              ack.ack_no = 0;
+            }*/
+            break;
           }
         }
+
+        if (ack.ack_no < num_packets) {
+          fprintf(stderr, "\t-------- SEND ACK %i\n", ack.ack_no);
+          if (sendto(sock, &ack, ACK_SIZE, 0,
+               (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
+              DieWithError("sendto() sent a different number of bytes than expected");
+
+          if (ack.ack_no == num_packets-1) {
+            for (int i = 0; i < num_packets ; i++){
+              fprintf(stderr, "%s", buffer + (i * data_length * sizeof(char)));
+            }
+            fprintf(stderr, "\n");
+            return 0;
+
+          }
+        }
+
     }
     /* NOT REACHED */
 }

@@ -38,6 +38,7 @@ int main(int argc, char *argv[])
     // base and last_sent indicate the boundaries of the sliding window
     int base = 0;        // smallest sequence number in the window
     int last_sent = -1;   // largest sequence number in the window that can be sent or has been sent. base+4
+    int retransmit = 0;
 
     int ndups = 0;   // number of duplicate ACKs received
 
@@ -75,7 +76,6 @@ int main(int argc, char *argv[])
 
     /* ----- TODO: loop until all packets have been sent ----- */
     while (1==1) {
-      // initially send the first 5 packets
       struct data_pkt_t pkt;
       pkt.type = 1;
       pkt.seq_no = last_sent + 1;
@@ -85,21 +85,29 @@ int main(int argc, char *argv[])
       // send the next packet if we can
       if (last_sent < base + window_size && last_sent < 23) {
         // only copy the data into the packet if we are actually ready to send
-        memcpy(pkt.data, &buffer[pkt.seq_no * 10], pkt.length);
+        if (retransmit == 0) {
+          last_sent = pkt.seq_no;
+        }
+        else {
+          pkt.seq_no = base;
+        }
+        printf("SEND PACKET %i \n", pkt.seq_no);
 
+        memcpy(pkt.data, &buffer[pkt.seq_no * 10], pkt.length);
         if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
                    &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
             DieWithError("sendto() sent a different number of bytes than expected");
         //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
-        printf("SEND PACKET %i", pkt.seq_no);
-        last_sent = pkt.seq_no;
-        if (last_sent > 23){
+
+        if (last_sent > 23)
           last_sent = 23;
-        }
       }
+
+      retransmit = 0;
 
       /* Get a response */
       struct ack_pkt_t ack;
+      ack.ack_no = -2;
       fromSize = sizeof(fromAddr);
       alarm(TIMEOUT_SECS);        /* Set the timeout */
       while ((respLen = recvfrom(sock, &ack, ACK_SIZE, 0,
@@ -107,37 +115,35 @@ int main(int argc, char *argv[])
           if (errno == EINTR)     /* Alarm went off  */
           {
             // TODO: retransmit all packets from base to last_sent.
-            base = pkt.seq_no;
-            last_sent = pkt.seq_no-1;   // -1 is because last_sent is incramented
-            DieWithError("No Response");
+            //base = pkt.seq_no;
+            printf("\t---- TIMEOUT ----\n");
+            last_sent = base-1;   // -1 is because last_sent is incramented
+            break;
           }
           else
               DieWithError("recvfrom() failed");
 
       /* ----- TODO: HANDLE ACK ----- */
-      printf("-------- RECEIVE ACK %i\n", ack.ack_no);
+      if (ack.ack_no < base-1) {
+        //printf("ignore ack %i\n", ack.ack_no);
+        continue;
+      }
+
+      printf("\t-------- RECEIVE ACK %i\n", ack.ack_no);
       // Step1 - clear the timer
       alarm(0);
       // Step2 - process the ACK
       if (ack.ack_no == 23){          // 23 is the last packet, we are done
         break;
       }
-      else if (ack.ack_no < base-1) {
-        // ignore the packet
-      }
       else if (ack.ack_no == base-1) {  // ack is a duplicate
         ndups++;
-        if (ndups >= 3) {
-          last_sent = base-1;
-          printf("retransmitting pkt %i", last_sent);
+        if (ndups > 3) {
+          //last_sent = base-1;     // base-1 because last sent will be incramented at beginning of loop
+          //printf("retransmitting pkt %i\n", base);
+          ndups = 0;
+          retransmit = 1;
           // retransmit the packet with sequence number base ONLY
-          /*
-          pkt.seq_no = base;
-          if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
-                     &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
-              DieWithError("sendto() sent a different number of bytes than expected");
-          //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
-          printf("SEND PACKET %i", pkt.seq_no);*/
         }
       }
       else if (ack.ack_no >= base) {    // new ack
@@ -149,9 +155,7 @@ int main(int argc, char *argv[])
           // last_sent = min(base+4, 23)
 
       // Step3 - set timer after processing ACK
-
     }
-
     close(sock);
     exit(0);
 }
