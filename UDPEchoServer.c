@@ -61,8 +61,6 @@ int main(int argc, char *argv[])
     if (bind(sock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
         DieWithError("bind() failed");
 
-    //printf("serv: %i", echoServAddr.sin_addr.s_addr);
-
     for (;;) /* Run forever */
     {
         /* Set the size of the in-out parameter */
@@ -73,8 +71,7 @@ int main(int argc, char *argv[])
             (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
             DieWithError("recvfrom() failed");
 
-        //fprintf(stderr, "Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
-        /* ----- TODO: READ DATA ----- */
+        /* READ DATA */
         fprintf(stderr, "RECEIVE PACKET %i \n", pkt.seq_no);
         int drop = 0;
         if (ndrops > drop_idx) {
@@ -88,9 +85,7 @@ int main(int argc, char *argv[])
         if (drop == 0) {
           packet_rcvd[pkt.seq_no] = 1;
           int data_idx = pkt.seq_no * data_length * sizeof(char);
-          //memcpy(buffer + data_idx, pkt.data, pkt.length * sizeof(char));
           strcpy(buffer + data_idx, pkt.data);
-          //fprintf(stderr, "buff[%i]=%s\n", data_idx, buffer + data_idx);
         }
 
         struct ack_pkt_t ack;
@@ -99,9 +94,6 @@ int main(int argc, char *argv[])
         for (int i = 0; i < num_packets; i++) {
           if (packet_rcvd[i] == 0){
             ack.ack_no = i-1;
-            /*if (ack.ack_no < 0){
-              ack.ack_no = 0;
-            }*/
             break;
           }
         }
@@ -112,16 +104,16 @@ int main(int argc, char *argv[])
                (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != ACK_SIZE)
               DieWithError("sendto() sent a different number of bytes than expected");
 
+          // all info received, print it out and terminate
           if (ack.ack_no == num_packets-1) {
+            // printing this way becasue I had issues printing the buffer as a whole.
             for (int i = 0; i < num_packets ; i++){
               fprintf(stderr, "%s", buffer + (i * data_length * sizeof(char)));
             }
             fprintf(stderr, "\n");
             return 0;
-
           }
         }
-
     }
     /* NOT REACHED */
 }

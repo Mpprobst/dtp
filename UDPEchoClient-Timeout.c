@@ -32,13 +32,12 @@ int main(int argc, char *argv[])
     int respLen;                     /* Size of received datagram */
 
     // buffer is ALL the data we are sending to the server
-    // packets can take 10B data at a time. 1 char = 1B, therefore we need 24 packets to transmit this message
     char buffer[240]="The University of Kentucky is a public, research-extensive,land grant university dedicated to improving people’s lives throughexcellence in teaching, research, health care, cultural enrichment,and economic development.";
 
     // base and last_sent indicate the boundaries of the sliding window
-    int base = 0;        // smallest sequence number in the window
+    int base = 0;         // smallest sequence number in the window
     int last_sent = -1;   // largest sequence number in the window that can be sent or has been sent. base+4
-    int retransmit = 0;
+    int retransmit = 0;   // if 1, we are retransmitting a packet due to it being dropped
 
     int ndups = 0;   // number of duplicate ACKs received
 
@@ -74,17 +73,15 @@ int main(int argc, char *argv[])
     echoServAddr.sin_addr.s_addr = inet_addr(servIP);  /* Server IP address */
     echoServAddr.sin_port = htons(echoServPort);       /* Server port */
 
-    /* ----- TODO: loop until all packets have been sent ----- */
+    /* loop until all packets have been sent */
     while (1==1) {
       struct data_pkt_t pkt;
       pkt.type = 1;
       pkt.seq_no = last_sent + 1;
       pkt.length = 10;
-      //printf("Sending: %s. size of = %i, %i, %i, %i = %i\n", pkt.data, sizeof(pkt.type), sizeof(pkt.seq_no), sizeof(pkt.length), sizeof(pkt.data), sizeof(pkt));
 
       // send the next packet if we can
       if (last_sent < base + window_size && last_sent < 23) {
-        // only copy the data into the packet if we are actually ready to send
         if (retransmit == 0) {
           last_sent = pkt.seq_no;
         }
@@ -97,7 +94,6 @@ int main(int argc, char *argv[])
         if (sendto(sock, &pkt, PKT_SIZE, 0, (struct sockaddr *)
                    &echoServAddr, sizeof(echoServAddr)) != PKT_SIZE)
             DieWithError("sendto() sent a different number of bytes than expected");
-        //printf("send size = %i. PKT_SIZE = %i\n", sendsize, PKT_SIZE);
 
         if (last_sent > 23)
           last_sent = 23;
@@ -114,8 +110,7 @@ int main(int argc, char *argv[])
              (struct sockaddr *) &fromAddr, &fromSize)) < 0)
           if (errno == EINTR)     /* Alarm went off  */
           {
-            // TODO: retransmit all packets from base to last_sent.
-            //base = pkt.seq_no;
+            // retransmit all packets from base to last_sent.
             printf("\t---- TIMEOUT ----\n");
             last_sent = base-1;   // -1 is because last_sent is incramented
             break;
@@ -125,36 +120,26 @@ int main(int argc, char *argv[])
 
       /* ----- TODO: HANDLE ACK ----- */
       if (ack.ack_no < base-1) {
-        //printf("ignore ack %i\n", ack.ack_no);
+        // ignore
         continue;
       }
 
       printf("\t-------- RECEIVE ACK %i\n", ack.ack_no);
-      // Step1 - clear the timer
       alarm(0);
-      // Step2 - process the ACK
-      if (ack.ack_no == 23){          // 23 is the last packet, we are done
+      if (ack.ack_no == 23){            // 23 is the last packet, we are done
         break;
       }
       else if (ack.ack_no == base-1) {  // ack is a duplicate
         ndups++;
         if (ndups > 3) {
-          //last_sent = base-1;     // base-1 because last sent will be incramented at beginning of loop
-          //printf("retransmitting pkt %i\n", base);
           ndups = 0;
           retransmit = 1;
-          // retransmit the packet with sequence number base ONLY
         }
       }
       else if (ack.ack_no >= base) {    // new ack
         ndups = 0;
         base = ack.ack_no + 1;
       }
-        // send new packets allowed by window size. handled at beginning of loop
-          // Packets to send are packets with sequence_no from last_sent + 1 to min(base+4, 23)
-          // last_sent = min(base+4, 23)
-
-      // Step3 - set timer after processing ACK
     }
     close(sock);
     exit(0);
