@@ -22,11 +22,13 @@ int main(int argc, char *argv[])
     int recvMsgSize;                 /* Size of received message */
     const int num_packets = 24;
     const int data_length = 10;
-    int packet_rcvd[num_packets] = {0};    // record of the packets received
+    int packet_rcvd[num_packets];	// = {0};    // record of the packets received
     int * drop_list;                 // list of packets to drop
     int ndrops = 0;                  // length of drop_list
     int drop_idx = 0;                // index of next packet to drop
-    char * buffer[data_length * num_packets] = {'-'};
+    char * buffer[data_length * num_packets];	// = {'-'};
+	memset(buffer, '-', data_length*num_packets*sizeof(char));
+	memset(packet_rcvd, 0, num_packets*sizeof(int));
 
     if (argc < 2)         /* Test for correct number of parameters */
     {
