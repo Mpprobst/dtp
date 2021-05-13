@@ -27,8 +27,8 @@ int main(int argc, char *argv[])
     int ndrops = 0;                  // length of drop_list
     int drop_idx = 0;                // index of next packet to drop
     char * buffer[data_length * num_packets];	// = {'-'};
-	memset(buffer, '-', data_length*num_packets*sizeof(char));
-	memset(packet_rcvd, 0, num_packets*sizeof(int));
+	  memset(buffer, '-', data_length*num_packets*sizeof(char));
+	  memset(packet_rcvd, 0, num_packets*sizeof(int));
 
     if (argc < 2)         /* Test for correct number of parameters */
     {
@@ -59,9 +59,13 @@ int main(int argc, char *argv[])
     echoServAddr.sin_addr.s_addr = htonl(INADDR_ANY); /* Any incoming interface */
     echoServAddr.sin_port = htons(echoServPort);      /* Local port */
 
+
     /* Bind to the local address */
     if (bind(sock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
         DieWithError("bind() failed");
+
+    fprintf(stderr, "server ip: %i\n", echoServAddr.sin_addr.s_addr);
+
 
     for (;;) /* Run forever */
     {
